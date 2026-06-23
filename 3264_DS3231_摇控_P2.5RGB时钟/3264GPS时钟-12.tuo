@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="Windows-1252" ?>
+<TKStudioOptions Version="3.00" Author="YinHandong[Òüº®¶¬]">
+    <Projects OPTPES="98,96,0,0,0,0,0,0,0,0,0,0,">
+        <Project ProjectGUID="{CD5E3B37-0C6A-4212-AF6A-4C60B9FF377B}" Name="3264GPSÊ±ÖÓ-12" ACTCFG="Ä¿±ê 1">
+            <TARGOPT Name="Ä¿±ê 1" OPTDF="0">
+                <OPTFFF VAL="&lt;.\3264GPSÊ±ÖÓ.c&gt; {0,1,-1,-1,0,0,1018,488,0,4336}" />
+                <OPTFFF VAL="&lt;.\1302.H&gt; {2,3,-1,-1,22,29,1040,496,0,59}" />
+            </TARGOPT>
+        </Project>
+    </Projects>
+</TKStudioOptions>

@@ -1,0 +1,94 @@
+
+/**************************字节读函数***************************************/
+void Read_EEP()
+{
+	unsigned char i;
+	IAP_DATA = 0x00;    //清空数据
+	IAP_CONTR = 0x81;    //打开IAP,设置操作等待时间
+	IAP_CMD = 0x01;    //字节读命令
+	IAP_ADDRH = 0;	//设置高8位地址
+	for(i=0;i<5;i++)
+	{
+		IAP_ADDRL = i;    //设置低8位地址
+		IAP_TRIG = 0x5a;    //发送5ah到触发寄存器
+		IAP_TRIG = 0xa5;    //发送a5h到触发寄存器
+		_nop_();    //延时	
+		IR_Key[i]=IAP_DATA;
+	}
+	IAP_CONTR = 0;    //关闭IAP 功能
+}
+
+/*****************************字节编程函数*****************************/
+void Write_EEP()
+{
+	unsigned char i;
+	IAP_CONTR = 0x81;    //打开IAP,设置操作等待时间
+	IAP_CMD = 0x03;    //扇区擦除命令
+	IAP_ADDRH = 0;	//设置高8位地址
+	IAP_ADDRL = 0;    //设置低8位地址
+	IAP_TRIG = 0x5a;    //发送5ah到触发寄存器
+	IAP_TRIG = 0xa5;    //发送a5h到触发寄存器
+	_nop_();    //延时
+
+	IAP_CONTR = 0x81;    //打开IAP,设置操作等待时间
+	IAP_CMD = 0x02;    //字节编程命令
+	for (i=0;i<5;i++)
+	{
+		IAP_ADDRL = i;    //设置低8位地址
+		IAP_DATA=IR_Key[i];
+		IAP_TRIG = 0x5a;    //发送5ah到触发寄存器
+		IAP_TRIG = 0xa5;    //发送a5h到触发寄存器
+		_nop_();    //延时
+	}
+
+	IAP_CONTR = 0;    //关闭IAP 功能
+}
+
+
+/*
+//**************************EEPROM公共代码*********************************
+void gonggongdaima(void)//所有的公共代码都是因为多次使用到了,而把它们整理起来再调用可以减小编译后的文件大小(迫不得已的做法,因为单片机的FLASH太小了,否则装不下程序)
+{
+ IAP_TRIG = 0x5a;//发送5ah到触发寄存器
+ IAP_TRIG = 0xa5;//发送a5h到触发寄存器
+ _nop_();//延时
+ IAP_CONTR = 0;//关闭IAP 功能
+ IAP_CMD = 0;//清空命令寄存器
+ IAP_TRIG = 0;//清空命令触发寄存器
+ IAP_ADDRH = 0;//清空地址高位
+ IAP_ADDRL = 0;//清空地址低位
+}
+
+//**************************字节读函数***************************************
+unsigned char Byte_Read(unsigned int add)
+{
+ IAP_DATA = 0x00;//清空数据
+ IAP_CONTR = 0x81;//打开IAP,设置操作等待时间 
+ IAP_CMD = 0x01;//字节读命令
+ IAP_ADDRH = add>>8;//设置高8位地址
+ IAP_ADDRL = add&0x00ff;//设置低8位地址
+ gonggongdaima();
+ return (IAP_DATA);//返回读到的数据
+}
+
+//*****************************字节编程函数*****************************
+void Byte_Program(unsigned int add, unsigned char dat)
+{
+ IAP_CONTR = 0x81;//打开IAP,设置操作等待时间
+ IAP_CMD = 0x02;//字节编程命令
+ IAP_ADDRH = add>>8;//设置高8位地址
+ IAP_ADDRL = add&0x00ff;//设置低8位地址
+ IAP_DATA = dat;//要编程的数据先送进IAP_DATA 寄存器
+ gonggongdaima();
+}
+
+//*****************************扇区擦除函数****************************
+void Sector_Erase(unsigned int add)
+{
+ IAP_CONTR = 0x81;//打开IAP,设置操作等待时间
+ IAP_CMD = 0x03;//扇区擦除命令
+ IAP_ADDRH = add>>8;//设置高8位地址
+ IAP_ADDRL = add&0x00ff;//设置低8位地址
+ gonggongdaima();
+}
+*/

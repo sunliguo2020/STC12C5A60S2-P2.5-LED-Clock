@@ -1,0 +1,604 @@
+
+// 正(0) 一(1) 二(2) 三(3) 四(4) 五(5) 六(6) 七(7)
+// 八(8) 九(9) 十(10) 冬(11) 腊(12) 周(13) 月(14) 日(15)
+// 年(16) 亮(17) 度(18) 月(19) 日(20) 十(21) 设(22) 置(23)
+// 期(24) 时(25) 间(26) 最(27) 小(28) 绿(29) 补(30) 偿(31)
+// 温(32) 请(33) 按(34) 遥(35) 控(36) 学(37) 习(38) 成(39)
+// 功(40) 键(41)
+
+
+void shezhi()
+{
+ 	uchar row1,row2;
+
+	row1=row*2;
+	row2=row*2+1;
+	
+	GD1[0]=HZ[22][row1];	//“设置”
+	GD1[1]=HZ[22][row2];
+	GD1[2]=HZ[23][row1];	//
+	GD1[3]=HZ[23][row2];
+}
+void SetNian_G()
+{
+ 	uchar row1,row2;
+
+	row1=row*2;
+	row2=row*2+1;
+
+	shezhi();
+	GD1[4]=0;
+	GD1[5]=HZ[16][row1];	//“年”
+	GD1[6]=HZ[16][row2];
+	GD1[7]=0; 
+
+//	GD2[4]=Num13[nian1][row];
+//	GD2[5]=Num13[nian2][row];
+//
+//	if(SHAN&&Set_S==1)
+//		GD2[4]=GD2[5]=0;
+}
+
+void SetNian_R()
+{
+ 	uchar row1,row2;
+
+	row1=row*2;
+	row2=row*2+1;
+
+	RD1[5]=HZ[16][row1];
+	RD1[6]=HZ[16][row2];
+
+	RD2[1]=Num13[ 2][row];
+	RD2[2]=Num13[ 0][row];
+	RD2[3]=Num13[nian1][row];
+	RD2[4]=Num13[nian2][row];
+	RD2[6]=HZ[16][row1];
+	RD2[7]=HZ[16][row2];
+
+	if(SHAN2)
+		RD2[4]=RD2[3]=0;
+}
+
+//*************设置月_******************/
+void SetYue_G()	//
+{
+ 	uchar row1,row2;
+
+	row1=row*2;
+	row2=row*2+1;
+
+	shezhi();
+	
+	GD1[5]=HZ[14][row1];	//“日”
+	GD1[6]=HZ[14][row2];
+	
+	GD2[2]=HZ[19][row1];	//汉字月
+	GD2[3]=HZ[19][row2] ;
+
+	GD2[6]=HZ[20][row1];	  //汉字日
+	GD2[7]=HZ[20][row2];
+
+
+
+}
+
+
+void SetYue_R()	//设置月
+{
+ 	uchar row1,row2;
+	row1=row*2;
+	row2=row*2+1;
+	
+	RD1[5]=HZ[14][row1];	//“月”
+	RD1[6]=HZ[14][row2];
+
+	
+	if(!yue1) RD1[0]=0; else
+	RD2[0]=Num13[yue1][row];	 //月十位
+	RD2[1]=Num13[yue2][row];	 //月各位
+	// RD2[2]=HZ[19][row1];	//汉字月
+	// RD2[3]=HZ[19][row2] ;
+	RD2[4]=Num13[ri1][row];	 //日十位
+	RD2[5]=Num13[ri2][row];	 //日个位
+	if(SHAN2)
+		RD2[0]=RD2[1]=0;
+}
+
+
+//***********设置日*****************/
+void SetRi_G()	//设置日
+{
+ 	uchar row1,row2;
+	row1=row*2;
+	row2=row*2+1;
+
+	shezhi();
+	
+	GD1[5]=HZ[15][row1];	//“日”
+	GD1[6]=HZ[15][row2];
+	
+	GD2[2]=HZ[19][row1];	//汉字月
+	GD2[3]=HZ[19][row2] ;
+
+	GD2[6]=HZ[20][row1];	  //汉字日
+	GD2[7]=HZ[20][row2];
+
+
+	
+//	if(Set_S==2)
+//	{
+//		// if(!yue1) GD1[0]=0; else
+//		GD2[0]=Num12[yue1][row];	 //月十位
+//		GD2[1]=Num12[yue2][row];	 //月各位
+//	}
+//	else
+//	{
+//		GD2[4]=Num12[ri1][row];	 //日十位
+//		GD2[5]=Num12[ri2][row];	 //日个位
+//	}
+}
+
+
+void SetRi_R()	//设置日
+{
+ 	uchar row1,row2;
+	row1=row*2;
+	row2=row*2+1;
+	
+	RD1[5]=HZ[15][row1];	//“日”
+	RD1[6]=HZ[15][row2];
+
+	
+	if(!yue1) RD1[0]=0; else
+	RD2[0]=Num13[yue1][row];	 //月十位
+	RD2[1]=Num13[yue2][row];	 //月各位
+	// RD2[2]=HZ[19][row1];	//汉字月
+	// RD2[3]=HZ[19][row2] ;
+	RD2[4]=Num13[ri1][row];	 //日十位
+	RD2[5]=Num13[ri2][row];	 //日个位
+	if(SHAN2)
+		RD2[4]=RD2[5]=0;
+}
+
+//***********设置时********
+void SetShi_G()	//设置时
+{
+ 	uchar row1,row2;
+	row1=row*2;
+	row2=row*2+1;
+
+	shezhi();	
+	
+	GD1[5]=HZ[25][row1];
+	GD1[6]=HZ[25][row2];	//“s时”	
+
+	
+	// if (Set_S==4)
+	// {
+		// GD2[0]=Num13[shi1][row];
+		// GD2[1]=Num13[shi2][row];
+	// }
+	// if (Set_S==5)
+	// {
+		// GD2[3]=Num13[fen1][row];
+		// GD2[4]=Num13[fen2][row];
+	// }
+	// if (Set_S==6)
+	// {
+		// GD2[6]=Num13[miao1][row];
+		// GD2[7]=Num13[miao2][row];
+	// }
+	
+	
+}
+
+
+void SetShi_R()	//设置 时
+{
+ 	uchar row1,row2;
+	row1=row*2;
+	row2=row*2+1;
+
+	RD1[5]=HZ[25][row1];	//“s时”
+	RD1[6]=HZ[25][row2];	
+	if(shi1)
+	RD2[0]=Num13[shi1][row];
+	RD2[1]=Num13[shi2][row];
+	RD2[2]=Num12[11][row];
+	RD2[3]=Num13[fen1][row];
+	RD2[4]=Num13[fen2][row];
+	RD2[5]=RD2[2];
+	RD2[6]=Num13[miao1][row];
+	RD2[7]=Num13[miao2][row];
+	
+	if(SHAN2)
+		RD2[0]=RD2[1]=0;
+	if(PM)
+		RD2[0]|=Num12[15][row];
+}
+
+//************设置分**********
+void SetFen_G()	//设置分
+{
+ 	uchar row1,row2;
+	row1=row*2;
+	row2=row*2+1;
+
+	shezhi();	
+	
+	GD1[5]=HZ[42][row1];
+	GD1[6]=HZ[42][row2];	//“s分”	
+
+}
+
+
+void SetFen_R()
+{
+ 	uchar row1,row2;
+	row1=row*2;
+	row2=row*2+1;
+
+	RD1[5]=HZ[42][row1];	//“fen”
+	RD1[6]=HZ[42][row2];	
+ 	if(shi1)
+	RD2[0]=Num13[shi1][row];
+	RD2[1]=Num13[shi2][row];
+	RD2[2]=Num12[11][row];
+	RD2[3]=Num13[fen1][row];
+	RD2[4]=Num13[fen2][row];
+	RD2[5]=RD2[2];
+	RD2[6]=Num13[miao1][row];
+	RD2[7]=Num13[miao2][row];
+	if(PM)
+		RD2[0]|=Num12[15][row];	
+	if(SHAN2)
+		RD2[3]=RD2[4]=0;
+}
+
+//**********设置秒**********
+void SetMiao_G()
+{
+ 	uchar row1,row2;
+	row1=row*2;
+	row2=row*2+1;
+
+	shezhi();	
+	
+	GD1[5]=HZ[43][row1];
+	GD1[6]=HZ[43][row2];	//“s”	
+}
+
+
+void SetMiao_R()
+{
+ 	uchar row1,row2;
+	row1=row*2;
+	row2=row*2+1;
+
+	RD1[5]=HZ[43][row1];	//“”
+	RD1[6]=HZ[43][row2];	
+	if(shi1)
+	RD2[0]=Num13[shi1][row];
+	RD2[1]=Num13[shi2][row];
+	RD2[2]=Num12[11][row];
+	RD2[3]=Num13[fen1][row];
+	RD2[4]=Num13[fen2][row];
+	RD2[5]=RD2[2];
+	RD2[6]=Num13[miao1][row];
+	RD2[7]=Num13[miao2][row];
+	if(PM)
+		RD2[0]|=Num12[15][row];	
+	if(SHAN2)
+		RD2[6]=RD2[7]=0;
+}
+
+//*********设置亮度************
+void SetLiangdu_G()
+{
+ 	uchar row1,row2;
+
+	row1=row*2;
+	row2=row*2+1;
+
+	shezhi();
+	GD1[4]=HZ[17][row1];	//“亮”
+	GD1[5]=HZ[17][row2];	
+	GD1[6]=HZ[18][row1];	//度
+	GD1[7]=HZ[18][row2];	
+	
+	GD2[0]=Num13[Li/100][row];
+	GD2[1]=Num13[Li%100/10][row];
+	GD2[2]=Num13[Li%10][row];
+}
+
+void SetLiangdu_R()
+{
+ 	uchar row1,row2;
+	row1=row*2;
+	row2=row*2+1;
+
+
+	RD1[4]=HZ[17][row1];	//“亮”
+	RD1[5]=HZ[17][row2];	
+	RD1[6]=HZ[18][row1];	//度
+	RD1[7]=HZ[18][row2];	
+	
+	RD2[5]=Num13[Liangdu/10][row];
+	RD2[6]=Num13[Liangdu%10][row];
+	if(SHAN2)
+		RD2[5]=RD2[6]=0;
+}
+
+//***********设置最小亮度**********
+void SetMinLiangdu_G()
+{
+	uchar row1,row2;
+	row1=row*2;
+	row2=row*2+1;
+
+	shezhi();
+	GD1[4]=HZ[27][row1];	//“最”
+	GD1[5]=HZ[27][row2];	
+	GD1[6]=HZ[28][row1];	//小
+	GD1[7]=HZ[28][row2];
+	
+	GD2[0]=HZ[17][row1];	//“亮”
+	GD2[1]=HZ[17][row2];	
+	GD2[2]=HZ[18][row1];	//度
+	GD2[3]=HZ[18][row2];	
+}
+
+void SetMinLiangdu_R()
+{
+	uchar row1,row2;
+	row1=row*2;
+	row2=row*2+1;
+
+	RD1[4]=HZ[27][row1];	//“最”
+	RD1[5]=HZ[27][row2];	
+	RD1[6]=HZ[28][row1];	//小
+	RD1[7]=HZ[28][row2];
+	
+	RD2[0]=HZ[17][row1];	//“亮”
+	RD2[1]=HZ[17][row2];	
+	RD2[2]=HZ[18][row1];	//度
+	RD2[3]=HZ[18][row2];	
+	
+	RD2[6]=Num13[Min_Liangdu][row];
+	if(SHAN2)
+		RD2[6]=0;
+}
+
+
+//*********设置绿补偿**********
+void SetLiangduG_G()
+{
+	uchar row1,row2;
+	row1=row*2;
+	row2=row*2+1;
+
+	shezhi();	
+	GD1[4]=HZ[29][row1];	//“绿”
+	GD1[5]=HZ[29][row2];	
+	GD1[6]=HZ[30][row1];	//补
+	GD1[7]=HZ[30][row2];
+	
+	GD2[0]=HZ[31][row1];	//“偿”
+	GD2[1]=HZ[31][row2];		
+	
+}
+
+
+void SetLiangduG_R()
+{
+	uchar row1,row2;
+	row1=row*2;
+	row2=row*2+1;
+	
+	RD1[4]=HZ[29][row1];	//“绿”
+	RD1[5]=HZ[29][row2];	
+	RD1[6]=HZ[30][row1];	//补
+	RD1[7]=HZ[30][row2];
+	
+	RD2[0]=HZ[31][row1];	//“偿”
+	RD2[1]=HZ[31][row2];	
+	
+	RD2[3]=Num13[Liangdu_G][row];
+	if(SHAN2)
+		RD2[3]=0;	
+}
+
+void NTCbuchang_G()
+{
+	uchar row1,row2;
+	row1=row*2;
+	row2=row*2+1;
+
+	GD1[0]=ZMlogo[11][row];	//N
+	GD1[1]=ZMlogo[12][row];	//T
+	GD1[2]=ZMlogo[13][row];	//C
+	GD1[4]=HZ[30][row1];		//补
+	GD1[5]=HZ[30][row2];
+	GD1[6]=HZ[31][row1];		//偿
+	GD1[7]=HZ[31][row2];
+	
+	GD2[3]=Num12[10][row];
+}
+
+void NTCbuchang_R()
+{
+	
+	RD2[0]=Num13[t1][row]>>5; 
+	RD2[1]=Num13[t1][row]<<3 | Num13[t2][row]>>6; 
+	RD2[2]=Num13[t2][row]<<2 ; 
+	// RD2[0]=Num13[ADC_T/100][row];
+	// RD2[1]=Num13[ADC_T%100/10][row];
+	// RD2[2]=Num13[ADC_T%10][row];
+	
+	if(SHAN2)
+	{
+		 if(NTC_buchang<10)
+		{
+			RD2[6]=Num13[11][row];	//-	
+			RD2[7]=Num13[10-NTC_buchang][row];
+		}
+		else
+			RD2[7]=Num13[NTC_buchang-10][row];
+		
+		
+/* 		RD2[6]=Num13[NTC_buchang/10][row];
+		RD2[7]=Num13[NTC_buchang%10][row]; */
+	}
+}
+
+
+void Yaokong_G()
+{
+	uchar row1,row2;
+	row1=row*2;
+	row2=row*2+1;
+	
+	shezhi();
+	GD1[4]=HZ[35][row1];	//遥
+	GD1[5]=HZ[35][row2];	//
+	GD1[6]=HZ[36][row1];	//控
+	GD1[7]=HZ[36][row2];	//
+	
+}
+
+
+void Yaokong_R()
+{
+	uchar row1,row2;
+	row1=row*2;
+	row2=row*2+1;
+
+	RD1[4]=HZ[35][row1];	//遥
+	RD1[5]=HZ[35][row2];	//
+	RD1[6]=HZ[36][row1];	//控
+	RD1[7]=HZ[36][row2];	//
+
+
+	if(SHAN2)
+	{
+		if(IR_POW)
+		{
+			RD2[6]=HZ[48][row1];	//开
+			RD2[7]=HZ[48][row2];	
+		}
+		else
+		{
+			RD2[6]=HZ[49][row1];	//关
+			RD2[7]=HZ[49][row2];	
+		}
+	}
+	
+		if(row>7)
+	{
+		row1=row-8;
+	
+		RD2[0]=Num5[IR_date[0]>>4][row1];			//用户码
+		RD2[1]=Num5[IR_date[0]&0x0f][row1]<<2;	//
+		RD2[2]=Num5[IR_date[2]>>4][row1];			//键码
+		RD2[3]=Num5[IR_date[2]&0x0f][row1]<<2;	//
+	}	
+
+}
+
+
+void Xuexi_G()
+{
+	uchar row1,row2,a1,a2,a3,a4;
+	row1=row*2;
+	row2=row*2+1;
+	switch(Set_S)
+	{
+		case 12:  a1=2;  a2=14;  a3=12;	a4=1;	break;	//SET	
+		case 13:  a1=15;  a2=16;  a3=19;	a4=2;	break;	//加
+		case 14:  a1=17;  a2=18;  a3=19;	a4=3;	break;	//减
+		case 15:  a1=14;  a2=2;  a3=13;	a4=4;	break;	//ESC
+		
+		default : break;
+	}
+	
+	if(xuexi_OK)
+	{				//学习成功
+		GD1[0]=ZMlogo[a1][row];
+		GD1[1]=ZMlogo[a2][row];
+		GD1[2]=ZMlogo[a3][row];
+		
+		if(row>7)
+		{
+			row1=row-8;
+		
+			GD2[4]=Num5[IR_Key[0]>>4][row1];			//用户码
+			GD2[5]=Num5[IR_Key[0]&0x0f][row1]<<2;	//
+			GD2[6]=Num5[IR_Key[a4]>>4][row1];			//键码
+			GD2[7]=Num5[IR_Key[a4]&0x0f][row1]<<2;	//
+		}
+	}
+	else
+	{
+		GD1[0]=HZ[37][row1];	//“学”
+		GD1[1]=HZ[37][row2];
+		GD1[2]=HZ[38][row1];	//"习"
+		GD1[3]=HZ[38][row2];		
+		GD1[5]=ZMlogo[a1][row];
+		GD1[6]=ZMlogo[a2][row];
+		GD1[7]=ZMlogo[a3][row];
+	}
+
+}
+
+
+void Xuexi_R()
+{
+	uchar row1,row2,a1,a2,a3,a4;
+	row1=row*2;
+	row2=row*2+1;
+	switch(Set_S)
+	{
+		case 12:  a1=2;  a2=14;  a3=12;	a4=1;	break;	//SET	
+		case 13:  a1=15;  a2=16;  a3=19;	a4=2;	break;	//加
+		case 14:  a1=17;  a2=18;  a3=19;	a4=3;	break;	//减
+		case 15:  a1=14;  a2=2;  a3=13;	a4=4;	break;	//ESC
+		
+		default : break;
+	}
+	
+	if(xuexi_OK)
+	{				//学习成功
+		RD1[0]=ZMlogo[a1][row];
+		RD1[1]=ZMlogo[a2][row];
+		RD1[2]=ZMlogo[a3][row];
+		RD1[4]=HZ[37][row1];	//“学”
+		RD1[5]=HZ[37][row2];
+		RD1[6]=HZ[38][row1];	//"习"
+		RD1[7]=HZ[38][row2];	
+		
+		RD2[0]=HZ[39][row1];	//“成”
+		RD2[1]=HZ[39][row2];
+		RD2[2]=HZ[40][row1];	//"功"
+		RD2[3]=HZ[40][row2];	
+
+	}	
+	else
+	{
+		RD1[5]=ZMlogo[a1][row];
+		RD1[6]=ZMlogo[a2][row];
+		RD1[7]=ZMlogo[a3][row];
+		
+		RD2[0]=HZ[33][row1];	//请
+		RD2[1]=HZ[33][row2];	//
+		RD2[2]=HZ[34][row1];	//按
+		RD2[3]=HZ[34][row2];	//
+		RD2[4]=HZ[35][row1];	//遥
+		RD2[5]=HZ[35][row2];	//
+		RD2[6]=HZ[36][row1];	//控
+		RD2[7]=HZ[36][row2];	//
+	}	
+}
+
+
+

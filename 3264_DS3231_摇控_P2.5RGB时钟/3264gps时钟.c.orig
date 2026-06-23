@@ -1,0 +1,2601 @@
+//原程序为Benli所创，只是把DS1302计时芯片换成DS3231+24C32模块。
+// 本时钟使用STC12C5A60S2单片机,24/24.576M晶振,DS3231高精度RTC芯片,GPS时间校正
+// 多模式显示,有三大模式,每个模式分别有时间粗体/细体,有秒/无秒,12时/24时8种模式,共计24模式
+// GPS时间校正,每天定时开启GPS校正本地时间
+// DS18B20/NTC温度传感器自适应,优先使用DS18B20
+// 自动亮度调节,根据环境光线自动调节屏幕亮度,白天清晰，晚上柔和而且省电
+// 学习型红外遥控
+// 停电后由电池供电并进入省电模式
+
+// 按键说明:
+// 在非设置模式下,按+键切换显示模式,-键切换12/24时制
+// 按SET分别设置  正常显示/年/月/日/时/分/秒/亮度/最低亮度/绿补偿/NTC补偿/遥控开关/学习模式
+// 按+/-调整数据,
+// ESC退出设置
+// 在学习模式下按遥控学习按键
+
+#include <STC15.H>
+//#include <STC12C5A60S2.H>
+#include <intrins.h>
+
+#define		ulong	unsigned long
+#define		uint	unsigned int
+#define		uchar	unsigned char
+#include "zimo2.h"
+#define NOP _nop_()
+#define NOP4 _nop_();_nop_();_nop_();_nop_()
+
+
+#define XSMOD_Max 11	//显示模式最大数
+//#define Set_Max 15	   //设置项目数15为有遥控
+#define Set_Max 10	   //设置项目数10为无遥控
+#define Liangdu_Max 19
+#define Min_Liangdu_Max 9
+#define Liangdu_G_Max 9
+
+#define ES_ON AUXR |= 0x10; ES=1
+#define ES_OFF AUXR &= 0xEF; ES=0
+
+//#define BRT_INT 0x62	//4800bps@24M
+#define BRT_INT 0xb1	//9600bps@24M
+#define EN_OFF() OE=0		//使能低电平有效,高电平有效取反
+#define EN_ON() OE=1
+//#define DATAHI			//数据高电平有效保留，低电平有效需去掉
+
+
+uchar code banben[4]="2.4";
+uchar idata GPRMC[]="$GPRMC";    //GPS选择接收字符$GPRMC,
+//uchar idata GPRMC[6]={0x24,0x47,0x50,0x52,0x4D,0x43};    //GPS选择接收字符$GPRMC,
+
+
+sbit G1=P3^5;	   	//红绿数据
+sbit G2=P2^4;
+sbit R1=P3^4;
+sbit R2=P2^3;
+sbit LS=P3^3;   		//锁存
+sbit CK=P3^2;  		 //时钟
+sbit OE=P3^6;		  //使能，低电平有效
+
+//#define  ABCD P0		   //ABCD接到P0.0-P0.3
+
+sbit IA  =P3^7;  //行控制线A
+sbit IB  =P2^0;  //行控制线B
+sbit IC  =P2^1;  //行控制线C
+sbit ID  =P2^2;  //行控制线D
+
+#define  scan0    {IA=0;IB=0;IC=0;ID=0;}
+#define  scan1    {IA=1;IB=0;IC=0;ID=0;}
+#define  scan2    {IA=0;IB=1;IC=0;ID=0;}
+#define  scan3    {IA=1;IB=1;IC=0;ID=0;}
+#define  scan4    {IA=0;IB=0;IC=1;ID=0;}
+#define  scan5    {IA=1;IB=0;IC=1;ID=0;}
+#define  scan6    {IA=0;IB=1;IC=1;ID=0;}
+#define  scan7    {IA=1;IB=1;IC=1;ID=0;}
+#define  scan8    {IA=0;IB=0;IC=0;ID=1;}
+#define  scan9    {IA=1;IB=0;IC=0;ID=1;}
+#define scan10    {IA=0;IB=1;IC=0;ID=1;}
+#define scan11    {IA=1;IB=1;IC=0;ID=1;}
+#define scan12    {IA=0;IB=0;IC=1;ID=1;}
+#define scan13    {IA=1;IB=0;IC=1;ID=1;}
+#define scan14    {IA=0;IB=1;IC=1;ID=1;}
+#define scan15    {IA=1;IB=1;IC=1;ID=1;}
+//
+void scan(unsigned char Value)
+{
+    switch (Value)
+    {
+    case  0:
+        scan0;
+        break;
+    case  1:
+        scan1;
+        break;
+    case  2:
+        scan2;
+        break;
+    case  3:
+        scan3;
+        break;
+    case  4:
+        scan4;
+        break;
+    case  5:
+        scan5;
+        break;
+    case  6:
+        scan6;
+        break;
+    case  7:
+        scan7;
+        break;
+    case  8:
+        scan8;
+        break;
+    case  9:
+        scan9;
+        break;
+    case 10:
+        scan10;
+        break;
+    case 11:
+        scan11;
+        break;
+    case 12:
+        scan12;
+        break;
+    case 13:
+        scan13;
+        break;
+    case 14:
+        scan14;
+        break;
+    case 15:
+        scan15;
+        break;
+    default:
+        break;
+    }
+}
+
+
+
+sbit GPS_POW=P1^5;		//gps电源控制
+sbit POW_OK= P1^6;		//外部电源检测
+sbit IR_POW=P1^7;		//红外接收电源
+
+
+sbit KeySet= P1^2;	    //调整按键
+sbit KeyAdd= P1^0;	    //加按键
+sbit KeyDec= P2^7;	    //减按键
+sbit KeyEsc= P1^1;		 //退出键
+
+bit K_ADD,K_DEC,K_SET,K_ESC;		//按键标志
+
+uchar data row;					//行扫描变量
+uchar data RD1[8];				//数据缓存
+uchar data GD1[8];
+uchar data RD2[8];
+uchar data GD2[8];
+
+uchar miao1,miao2;	   //秒数据，1十位，2个位
+uchar fen1,fen2	;	   //分数据
+uchar shi1,shi2	;	   //小时数据
+uchar ri1,ri2	;	   //日数据
+uchar yue1,yue2;	   //月数据
+uchar nian1,nian2;	   //年数据
+uchar week;	         //星期
+bit SHAN,SHAN2;		//闪烁标志
+uchar idata Set_S=0;
+
+uchar idata NL_yue;		//农历月 1~12
+uchar idata NL_ri;		//农历日 1~30
+uchar y1,y2,r1,r2;		//农历显示数据
+
+uchar  SJ[6],RQ[6];
+
+bit RX_over;   //GPS数据接收结束标志位
+bit DW_OK;	   //GPS定位成功标志位
+
+uint ADC_L;		  //ADC亮度数据
+uint ADC_T;		  //ADC温度数据
+bit ADCL;		  //亮度ADC标志
+bit ADCT;		  //温度ADC标志
+uchar t1,t2;	  //温度显示数据
+bit NTC;		//是否使用NTC测温标志
+bit Zhi_12,PM;	//12/24时制标示,0/24	1/12
+uchar idata XSMOD;	//显示模式
+char idata Liangdu;	//亮度
+char idata Min_Liangdu;		//最低亮度
+char idata Liangdu_G;		//绿亮度
+char idata Light_R,Light_L,Light_G;	//亮度控制用变量
+uchar idata Li;
+uchar idata NTC_buchang;		//NTC补偿
+
+uchar idata IR_date[7]= {0,0,0,0,0,0,0};    //date数组为存放地址原码，反码，数据原码，反码,标志位，
+//连发标志，临时数据（执行数据
+uchar idata IR_Key[5];	//红外键值,用户码,SET,+,-.ESC
+bit xuexi_OK ;		//红外学习成功标示
+
+#include "nongli.h"
+#include "DS3231+AT24C32.h"
+#include "18b20.h"
+#include "set.h"
+#include "eep.h"
+void Delayus(uint x);
+
+void Delay (uchar t)
+{   uchar i,j;
+    for (i=0; i<t; i++)
+
+        for(j=0; j<10; j++);
+}
+
+void Delayus(uint x)
+{
+    while(x--);
+}
+
+void GPSdata()
+{
+
+    static uchar idata hour[2],min[2],sec[2],year[2],mon[2],day[2];	//临时时间数据 ，为了预防数据传输的误码，使用了2次数据比较
+    static uchar idata a;
+    uchar idata max;
+
+    RX_over=0;
+
+    for(max=0; max<6; max++)
+    {
+        SJ[max]-=0x30;
+        RQ[max]-=0x30;
+    }							  					 //保存临时时间数据
+    hour[a]=SJ[0]*10	+ SJ[1];		 //时
+    min [a]=SJ[2]*10	+ SJ[3];		 //分
+    sec[a]=SJ[4]*10	+ SJ[5];		 //秒
+    day [a]=RQ[0]*10 + RQ[1];		 //日
+    mon [a]=RQ[2]*10 + RQ[3];		 //月
+    year[a]=RQ[4]*10 + RQ[5];		 //年
+    a++;
+    if(a>1)
+    {
+        a=0;
+        //如果第二次秒比上次小1，并且分，时，日，月,年相同
+        if(sec[1]-sec[0]==1&&min[1]==min[0]&&hour[1]==hour[0]&&day[1]==day[0]&&mon[1]==mon[0]&&year[1]==year[0])
+        {
+            sec[1]+=1;		  //GPS时间是包含毫秒的，加上1秒补偿传输和程序处理的延时
+            if(sec[1]>59)
+            {
+                sec[1]=0;
+                min[1]+=1;
+                if(min[1]>59)
+                {
+                    min[1]=0;
+                    hour[1]+=1;
+                }
+            }
+            hour[1]+=8;			//转换为北京时间 ，东8区要+8
+            if(hour[1]>23)		//如果超过23则到了第二天
+            {
+                hour[1]-=24;	//
+                day[1]+=1;		//日+1
+
+                switch(mon[1])		//获取每月最大天数
+                {
+                case 2:			 //2月
+                    if(year[1]%4==0)  //判断是否闰月，只取2000-2099年，因此简单的%4运算
+                        max=29;		  //闰月29天
+                    else
+                        max=28;		  //正常28天
+                    break;
+                case 4:
+                case 6:
+                case 9:
+                case 11:     //4，6，9，11月
+                    max=30;			 //30天
+                    break;
+                default:
+                    max=31;		  //其他月份1，3，5，7，8，10，12月31天
+                    break;
+                }
+                if(day[1]>max)
+                {
+                    mon[1]+=1;
+                    day[1]=1;
+                    if(mon[1]>12)
+                    {
+                        year[1]+=1;
+                        mon[1]=1;
+                    }
+                }
+            }
+            // 		写入时间数据到DS3231
+            ModifyTime(DS3231_SECOND, sec[1]/10*16 + sec[1]%10 ); 	 //秒
+            ModifyTime(DS3231_MINUTE, min[1]/10*16 + min[1]%10 ); 	 //分
+            ModifyTime(DS3231_HOUR, hour[1]/10*16 + hour[1]%10 ); //时
+            ModifyTime(DS3231_DAY, day[1]/10*16 + day[1]%10 );	 //日
+            ModifyTime(DS3231_MONTH, mon[1]/10*16 + mon[1]%10 );	 //月
+            ModifyTime(DS3231_YEAR, year[1]/10*16 + year[1]%10 ); //年
+
+            GPS_POW=1;			 //关闭GPS电源
+//			ES_OFF;
+            GetAllTime();		 //读取全部时间
+            GetNL_ri();			 //农历转换
+        }
+    }
+}
+
+
+void ShowLogo()
+{
+    uchar i,j;
+    uint x=300;
+    //uchar code *p;
+
+    while(x--)
+    {
+        WDT_CONTR=0x34;
+        for(row=0; row<16; row++)			 //扫描16行
+        {
+//            RD1[0]=ZMlogo[0][row];	//GPSclock
+//            RD1[1]=GD1[1]=ZMlogo[1][row];
+//            GD1[2]=ZMlogo[2][row];
+//            RD1[3]=ZMlogo[3][row];
+//            RD1[4]=GD1[4]=ZMlogo[4][row];
+//            GD1[5]=ZMlogo[5][row];
+//            RD1[6]=ZMlogo[6][row];
+//            RD1[7]=GD1[7]=ZMlogo[7][row];
+//
+//            RD2[0]=ZMlogo[8][row]; 	//V
+//            p=&banben;
+//            RD2[1]=Num12[*p][row];		//2
+//            RD2[2]=ZMlogo[9][row];	//.
+//            p+=2;
+//            RD2[3]=Num12[*p][row];
+//            if(NTC)
+//            {
+//                GD2[5]=ZMlogo[11][row];	//N
+//                GD2[6]=ZMlogo[12][row];	//T
+//                GD2[7]=ZMlogo[13][row];	//C
+//            }
+//            else
+//            {
+//                GD2[5]=ZMlogo[10][row];	//D
+//                GD2[6]=ZMlogo[2][row];	//S
+//            }
+//
+            GD1[0]=HZ[50][row*2];
+            GD1[1]=HZ[50][row*2+1];		  //万
+            RD1[2]=HZ[51][row*2];
+            RD1[3]=HZ[51][row*2+1];		  //年
+            GD1[4]=HZ[52][row*2];
+            GD1[5]=HZ[52][row*2+1];		  //历
+            RD1[6]=HZ[53][row*2];		 //钟
+            RD1[7]=HZ[53][row*2+1];
+
+            GD2[0]=HZ[54][row*2];
+            GD2[1]=HZ[54][row*2+1];
+            RD2[2]=HZ[55][row*2];
+            RD2[3]=HZ[55][row*2+1];
+            RD2[4]=GD2[4]=HZ[56][row*2];
+            RD2[5]=GD2[5]=HZ[56][row*2+1];
+            RD2[6]=GD2[6]=HZ[57][row*2];
+            RD2[7]=GD2[7]=HZ[57][row*2+1];
+
+
+
+            for(i=0; i<8; i++)					 //扫描1行
+            {
+                for(j=0; j<8; j++)			 //发送1个数据
+                {
+#ifdef	DATAHI
+                    RD1[i]<<=1;				//数据左移1	  如是逆向取模则改为右移>>
+                    R1=CY;		//发送最高位，
+                    RD2[i]<<=1;
+                    R2=CY;
+                    GD1[i]<<=1;
+                    G1=CY;
+                    GD2[i]<<=1;
+                    G2=CY;
+                    CK=0;					//时钟下降
+                    NOP4;
+                    CK=1;				   //时钟上升
+#else
+                    RD1[i]<<=1;				//数据左移1	  如是逆向取模则改为右移>>
+                    R1=!CY;		//发送最高位，
+                    RD2[i]<<=1;
+                    R2=!CY;		//由于数据是低电平有效，所以进行取反
+                    GD1[i]<<=1;
+                    G1=!CY;
+                    GD2[i]<<=1;
+                    G2=!CY;
+                    CK=0;					//时钟下降
+                    NOP4;
+                    CK=1;				   //时钟上升
+#endif
+                }
+            }
+            //ABCD=row;			//行选
+            scan(row);
+            LS=0;
+            NOP4;
+            LS=1;				//锁存上升，显示输出
+            EN_ON();				//显示开
+//            Delay(40);
+//			TH0=255-ADC_L;
+//			TR0=1;
+   //         EN_OFF();			    //显示关
+            //		Delay(1);
+        }
+    }
+}
+
+
+void Mode0123_RQ_G()		//  模式1234日期  绿数据
+{
+    uchar row1,row2;
+
+    row1=row+8;		//	上1/2屏行扫描
+    row2=row-8;		//	下1/2屏行扫描
+
+    if(row<8)		//上1/2屏
+    {
+        GD1[0]=(Num5[2][row]<<3)|(Num5[0][row]>>3);
+        GD1[1]=(Num5[0][row]<<5)|(Num5[nian1][row]>>1);
+        GD1[2]=(Num5[nian1][row]<<7)|(Num5[nian2][row]<<1);
+        GD1[3]=Num5[yue1][row];
+        GD1[4]=Num5[yue2][row]<<2;
+        GD1[5]=Num5[ri1][row]<<1;
+        GD1[6]=Num5[ri2][row]<<3;
+        GD1[7]=Num8[week][row];
+        if(row==3)		//日期点
+        {
+            GD1[3]|=0xC0;
+            GD1[4]|=0x01;
+            GD1[5]|=0x80;
+        }
+    }
+    else	   //下1/2/屏
+    {
+
+        GD2[0]=Num8[y1][row2];	//农历日期
+        GD2[1]=Num8[y2][row2];
+        GD2[2]=Num8[11][row2];
+        GD2[3]=NL8  [r1][row2];
+        GD2[4]=Num8[r2][row2]>>1;
+
+        GD2[5]=Num8[r2][row2]<<7 | Num5[t1][row2-1]>>2;	 //温度
+        GD2[6]=Num5[t2][row2-1] | Num5[t1][row2-1]<<6;
+        GD2[7]=Num5[17][row2];
+
+//		GD2[0]=Num5[Zhi_12][row2];
+//		GD2[1]=Num5[PM][row2];
+//		GD2[0]=Num5[Li/10][row2];
+//		GD2[1]=Num5[Li%10][row2];
+//		GD2[2]=0;
+//		GD2[3]=Num5[XSMOD/10][row2];
+//		GD2[4]=Num5[XSMOD%10][row2]<<2;
+
+        // GD2[5]=Num5[TH0/100][row2];
+        // GD2[6]=Num5[TH0%100/10][row2];
+        // GD2[7]=Num5[TH0%10][row2];
+    }
+}
+
+
+void Mode0123_RQ_R()	  //模式1234日期 红数据
+{
+    uchar row1,row2;
+
+    row1=row+8;		//	上1/2屏行扫描
+    row2=row-8;		//	下1/2屏行扫描
+    if(row<8)
+        RD1[7]=Num8[week][row];
+    else
+    {
+        RD2[5]=Num5[t1][row2-1]>>2;	 //温度
+        RD2[6]=Num5[t2][row2-1] | Num5[t1][row2-1]<<6;
+//		RD2[7]=Num5[17][row2];
+    }
+}
+
+void Mode0_SJ_G()
+{
+    uchar data row1,row2;
+
+    row1=row+8;		//	上1/2屏行扫描
+    row2=row-8;		//	下1/2屏行扫描
+
+    if(row<8)
+    {
+//        if(GPS_POW)
+        if(SHAN)
+            NOP;
+        else
+        {
+            GD2[2]|=maohao[0][row1];
+            GD2[6]|=maohao[1][row1];
+        }
+    }
+    else
+    {
+//       if(GPS_POW)
+        if(SHAN)
+            NOP;
+        else
+        {
+            GD1[2]|=maohao[0][row2];
+            GD1[6]|=maohao[1][row2];
+        }
+    }
+}
+
+
+void Mode0_SJ_R()	   //三行有秒,粗体时间
+{
+    uchar row1,row2,row3;
+
+    if(row<8)
+    {
+        row1=(row+8)*2;		//	上1/2屏行扫描
+        row2=(row+8)*2+1;		//	下1/2屏行扫描
+        row3=row+8;
+
+        if(shi1==0)
+        {
+            RD2[0]=0;
+            RD2[1]=Num14B[shi2][row1]>>3;
+        }
+        else
+        {
+            RD2[0]=Num14B[shi1][row1];	  //时
+            RD2[1]=Num14B[shi1][row2] | Num14B[shi2][row1]>>3;
+        }
+        RD2[2]=Num14B[shi2][row1]<<5 | Num14B[shi2][row2]>>3;
+        RD2[3]=Num14B[fen1][row1]>>2;	   // 分
+        RD2[4]=Num14B[fen1][row1]<<6 | Num14B[fen1][row2]>>2 | Num14B[fen2][row1]>>5;
+        RD2[5]=Num14B[fen2][row1]<<3 | Num14B[fen2][row2]>>5;
+        RD2[6]=Num12[miao1][row3]>>2;		   //秒
+        RD2[7]=Num12[miao2][row3]>>1 | Num12[miao1][row3]<<6;
+
+
+        if(GPS_POW)
+        {
+            RD2[2]|=maohao[0][row3];
+            RD2[6]|=maohao[1][row3];
+        }
+    }
+    else				  //时间上半部
+    {
+        row1=(row-8)*2;		//	上1/2屏行扫描
+        row2=(row-8)*2+1;		//	下1/2屏行扫描
+        row3=row-8;
+
+        if(shi1==0)
+        {
+            RD1[0]=0;
+            RD1[1]=Num14B[shi2][row1]>>3;
+        }
+        else
+        {
+            RD1[0]=Num14B[shi1][row1];	  //时
+            RD1[1]=Num14B[shi1][row2] | Num14B[shi2][row1]>>3;
+        }
+        RD1[2]=Num14B[shi2][row1]<<5 | Num14B[shi2][row2]>>3;
+        RD1[3]=Num14B[fen1][row1]>>2;	   // 分
+        RD1[4]=Num14B[fen1][row1]<<6 | Num14B[fen1][row2]>>2 | Num14B[fen2][row1]>>5;
+        RD1[5]=Num14B[fen2][row1]<<3 | Num14B[fen2][row2]>>5;
+        RD1[6]=Num12[miao1][row3]>>2;		   //秒
+        RD1[7]=Num12[miao2][row3]>>1 | Num12[miao1][row3]<<6;
+
+        if(PM)
+            RD1[0]|=Num12[15][row3];
+
+        if(GPS_POW)
+        {
+            RD1[2]|=maohao[0][row3];
+            RD1[6]|=maohao[1][row3];
+        }
+
+    }
+}
+
+
+
+void Mode1_SJ_R()
+{
+    uchar row1,row2;
+
+    row1=row+8;		//	上1/2屏行扫描
+    row2=row-8;		//	下1/2屏行扫描
+
+    if(row<8)
+    {
+        if(shi1==0) RD1[0]=0;
+        else
+            RD2[0]=Num14[shi1][row1];	  //时
+        RD2[1]=Num14[shi2][row1]>>2;
+        RD2[2]=Num14[shi2][row1]<<6;
+        RD2[3]=Num14[fen1][row1]>>2;	   // 分
+        RD2[4]=Num14[fen2][row1]>>4 | Num14[fen1][row1]<<6;
+        RD2[5]=Num14[fen2][row1]<<4 ;
+        RD2[6]=Num12[miao1][row1]>>1;		   //秒
+        RD2[7]=Num12[miao2][row1];
+
+
+        if(row==3|row==4)
+        {
+            if(GPS_POW)
+            {
+                RD2[2]|=0x06;
+                RD2[5]|=0x03;
+            }
+//			else
+//			{
+//				GD2[2]|=0x06;
+//				GD2[5]|=0x03;
+//			}
+        }
+
+    }
+    else				  //时间上半部
+    {
+        if(shi1==0) RD1[0]=0;
+        else
+            RD1[0]=Num14[shi1][row2];	  //时
+        RD1[1]=Num14[shi2][row2]>>2;
+        RD1[2]=Num14[shi2][row2]<<6;
+        RD1[3]=Num14[fen1][row2]>>2;	   // 分
+        RD1[4]=Num14[fen2][row2]>>4 | Num14[fen1][row2]<<6;
+        RD1[5]=Num14[fen2][row2]<<4 ;
+        RD1[6]=Num12[miao1][row2]>>1;		   //秒
+        RD1[7]=Num12[miao2][row2];
+        if(PM)
+            RD1[0]|=Num12[15][row2];
+
+        if(row==12|row==13)
+        {
+            if(GPS_POW)
+            {
+                RD1[2]|=0x06;
+                RD1[5]|=0x03;
+            }
+        }
+
+    }
+}
+
+
+
+void Mode1_SJ_G()
+{
+    uchar row1,row2;
+
+    row1=row+8;		//	上1/2屏行扫描
+    row2=row-8;		//	下1/2屏行扫描
+
+    if(row<8)
+    {
+        if(row==3|row==4)
+        {
+            if(GPS_POW)
+            {
+                ;
+            }
+            else
+            {
+                GD2[2]|=0x06;
+                GD2[5]|=0x03;
+            }
+        }
+    }
+    else
+    {
+        if(row==12|row==13)
+        {
+            if(GPS_POW)
+            {
+                ;
+            }
+            else
+            {
+                GD1[2]|=0x06;
+                GD1[5]|=0x03;
+            }
+        }
+    }
+}
+
+
+void Mode2_SJ_R()
+{
+    uchar row3,row4;
+
+    if(row<8)
+    {
+        ////时间
+        row3=(row+8)*2;
+        row4=(row+8)*2+1;
+        if(shi1==0) 	 //
+            RD2[0]=RD2[1]=0;
+        else
+        {
+            RD2[0]=Num16B[shi1][row3];	  //时
+            RD2[1]=Num16B[shi1][row4];
+        }
+        RD2[2]=Num16B[shi2][row3]<<3 | Num16B[shi2][row4]>>5;
+        RD2[3]=Num16B[shi2][row4]<<3;	   // 分
+        RD2[4]=Num16B[fen1][row3]>>3;
+        RD2[5]=Num16B[fen1][row4]>>3| Num16B[fen1][row3]<<5;
+        RD2[6]=Num16B[fen2][row3];		   //秒
+        RD2[7]=Num16B[fen2][row4];
+
+
+        //秒点
+        if(SHAN)
+        {
+            if(GPS_POW)
+            {
+                RD2[3]|=maohao[4][row+8];
+                RD2[4]|=maohao[3][row+8];
+            }
+        }
+        else
+        {
+            if(GPS_POW)
+            {
+                NOP4;
+                NOP4;
+            }
+        }
+    }
+    else				  //时间上半部
+    {
+//		if(shi1==0) RD1[0]=0; else
+        row3=(row-8)*2;
+        row4=(row-8)*2+1;
+        if(shi1==0)
+            RD1[0]=RD1[1]=0;
+        else
+        {
+            RD1[0]=Num16B[shi1][row3];	  //时
+            RD1[1]=Num16B[shi1][row4];
+        }
+        RD1[2]=Num16B[shi2][row3]<<3 | Num16B[shi2][row4]>>5;
+        RD1[3]=Num16B[shi2][row4]<<3;	   // 分
+        RD1[4]=Num16B[fen1][row3]>>3;
+        RD1[5]=Num16B[fen1][row4]>>3| Num16B[fen1][row3]<<5;
+        RD1[6]=Num16B[fen2][row3];		   //秒
+        RD1[7]=Num16B[fen2][row4];
+        if(PM)
+            RD1[0]|=Num12[15][row-8];
+        if(SHAN)
+        {
+            if(GPS_POW)
+            {
+                RD1[3]|=maohao[4][row-8];
+                RD1[4]|=maohao[3][row-8];
+            }
+        }
+        else
+        {
+            if(GPS_POW)
+            {
+                NOP4;
+                NOP4;
+            }
+        }
+    }
+
+}
+
+
+void Mode2_SJ_G()
+{
+    if(row<8)
+    {
+        //秒点
+        if(SHAN)
+        {
+
+            if(GPS_POW)
+            {
+                NOP;
+            }
+            else
+            {
+                GD2[3]|=maohao[4][row+8];
+                GD2[4]|=maohao[3][row+8];
+            }
+        }
+        else
+            Delayus(20);
+    }
+    else				  //时间上半部
+    {
+        if(SHAN)
+        {
+
+            if(GPS_POW)
+            {
+                NOP;
+            }
+            else
+            {
+                GD1[3]|=maohao[4][row-8];
+                GD1[4]|=maohao[3][row-8];
+            }
+        }
+        else
+            Delayus(20);
+    }
+
+}
+
+
+void Mode3_SJ_R()
+{
+    uchar row3,row4;
+
+    if(row<8)
+    {
+        ////时间
+        row3=(row+8)*2;
+        row4=(row+8)*2+1;
+        if(shi1==0) 	 //
+            RD2[0]=RD2[1]=0;
+        else
+        {
+            RD2[0]=Num16[shi1][row3];	  //时
+            RD2[1]=Num16[shi1][row4];
+        }
+        RD2[2]=Num16[shi2][row3]<<3 | Num16[shi2][row4]>>5;
+        RD2[3]=Num16[shi2][row4]<<3;	   // 分
+        RD2[4]=Num16[fen1][row3]>>3;
+        RD2[5]=Num16[fen1][row4]>>3| Num16[fen1][row3]<<5;
+        RD2[6]=Num16[fen2][row3];		   //秒
+        RD2[7]=Num16[fen2][row4];
+
+
+        //秒点
+        if(SHAN)
+        {
+            if(GPS_POW)
+            {
+
+                RD2[3]|=maohao[4][row+8];
+                RD2[4]|=maohao[3][row+8];
+            }
+        }
+        else
+        {
+            if(GPS_POW)
+            {
+                NOP4;
+                NOP4;
+            }
+        }
+    }
+    else				  //时间上半部
+    {
+//		if(shi1==0) RD1[0]=0; else
+        row3=(row-8)*2;
+        row4=(row-8)*2+1;
+        if(shi1==0)
+            RD1[0]=RD1[1]=0;
+        else
+        {
+            RD1[0]=Num16[shi1][row3];	  //时
+            RD1[1]=Num16[shi1][row4];
+        }
+        RD1[2]=Num16[shi2][row3]<<3 | Num16[shi2][row4]>>5;
+        RD1[3]=Num16[shi2][row4]<<3;	   // 分
+        RD1[4]=Num16[fen1][row3]>>3;
+        RD1[5]=Num16[fen1][row4]>>3| Num16[fen1][row3]<<5;
+        RD1[6]=Num16[fen2][row3];		   //秒
+        RD1[7]=Num16[fen2][row4];
+        if(PM)
+            RD1[0]|=Num12[15][row-8];
+        if(SHAN)
+        {
+            if(GPS_POW)
+            {
+                RD1[3]|=maohao[4][row-8];
+                RD1[4]|=maohao[3][row-8];
+            }
+        }
+        else
+        {
+            if(GPS_POW)
+            {
+                NOP4;
+                NOP4;
+            }
+        }
+    }
+
+}
+
+
+void Mode3_SJ_G()
+{
+    if(row<8)
+    {
+        //秒点
+        if(SHAN)
+        {
+
+            if(GPS_POW)
+            {
+                NOP;
+            }
+            else
+            {
+                GD2[3]|=maohao[4][row+8];
+                GD2[4]|=maohao[3][row+8];
+            }
+        }
+        else
+            Delayus(20);
+    }
+    else				  //时间上半部
+    {
+        if(SHAN)
+        {
+
+            if(GPS_POW)
+            {
+                NOP;
+            }
+            else
+            {
+                GD1[3]|=maohao[4][row-8];
+                GD1[4]|=maohao[3][row-8];
+            }
+        }
+        else
+            Delayus(20);
+    }
+
+}
+
+
+
+void Mode4567_RQ_G()
+{
+    uchar row1,row2;
+
+    row1=row+8;		//	上1/2屏行扫描
+    row2=row-8;		//	下1/2屏行扫描
+
+    if(row<8)		//上1/2屏
+    {
+//		GD1[0]=(Num5[2][row]<<3)|(Num5[0][row]>>3);
+//		GD1[1]=(Num5[0][row]<<5)|(Num5[nian1][row]>>1);
+//		GD1[2]=(Num5[nian1][row]<<7)|(Num5[nian2][row]<<1);
+//		GD1[3]=Num5[yue1][row];
+//		GD1[4]=Num5[yue2][row]<<2;
+//		GD1[5]=Num5[ri1][row]<<1;
+//		GD1[6]=Num5[ri2][row]<<3;
+        GD1[7]=Num8[week][row];
+        if(row==3)		//日期点
+        {
+            GD1[3]|=0xC0;
+            GD1[4]|=0x01;
+            GD1[5]|=0x80;
+        }
+    }
+    else	   //下1/2/屏
+    {
+
+        GD1[0]=Num8[y1][row2];	//农历日期
+        GD1[1]=Num8[y2][row2];
+        GD1[2]=Num8[11][row2];
+        GD1[3]=NL8  [r1][row2];
+        GD1[4]=Num8[r2][row2]>>1;
+
+        GD1[5]=Num8[r2][row2]<<7 | Num5[t1][row2-1]>>2;	 //温度
+        GD1[6]=Num5[t2][row2-1] | Num5[t1][row2-1]<<6;
+        GD1[7]=Num5[17][row2];
+
+        // GD1[0]=(Num5[Light_R/100][row2]<<3)|(Num5[Light_R%100/10][row2]>>3);
+        // GD1[1]=(Num5[Light_R%100/10][row2]<<5)|(Num5[Light_R%10][row2]>>1);
+        // GD1[2]=(Num5[Light_R%10][row2]<<7);
+
+        // GD1[3]=Num5[XSMOD/10][row2];
+        // GD1[4]=Num5[XSMOD%10][row2]<<2;
+
+//		GD1[5]=Num5[ADC_T/100][row2];
+//		GD1[6]=Num5[ADC_T%100/10][row2];
+//		GD1[7]=Num5[ADC_T%10][row2];
+
+//		GD1[5]=Num5[TH0/100][row2];
+//		GD1[6]=Num5[TH0%100/10][row2];
+//		GD1[7]=Num5[TH0%10][row2];
+    }
+}
+
+
+void Mode4567_RQ_R()	  //模式4567日期 红数据
+{
+    uchar row1,row2;
+
+    row1=row+8;		//	上1/2屏行扫描
+    row2=row-8;		//	下1/2屏行扫描
+    if(row<8)
+    {
+        RD1[0]=(Num5[2][row]<<3)|(Num5[0][row]>>3);
+        RD1[1]=(Num5[0][row]<<5)|(Num5[nian1][row]>>1);
+        RD1[2]=(Num5[nian1][row]<<7)|(Num5[nian2][row]<<1);
+        RD1[3]=Num5[yue1][row];
+        RD1[4]=Num5[yue2][row]<<2;
+        RD1[5]=Num5[ri1][row]<<1;
+        RD1[6]=Num5[ri2][row]<<3;
+        RD1[7]=Num8[week][row];
+    }
+    else
+    {
+        RD1[5]=Num5[t1][row2-1]>>2;	 //温度
+        RD1[6]=Num5[t2][row2-1] | Num5[t1][row2-1]<<6;
+//		RD1[7]=Num5[17][row2];
+    }
+}
+
+
+void Mode4_SJ_G()
+{
+    if(GPS_POW)
+    {
+        NOP;
+    }
+    else
+    {
+        GD2[2]|=maohao[0][row];
+        GD2[6]|=maohao[1][row];
+    }
+}
+
+
+void Mode4_SJ_R()
+{
+    uchar row1,row2;
+//	shi1=shi2=0;
+
+    row1=(row-1)*2;		//	上1/2屏行扫描
+    row2=(row-1)*2+1;		//	下1/2屏行扫描
+    if(row)
+    {
+        if(shi1==0)
+        {
+            RD2[0]=0;
+            RD2[1]=Num14B[shi2][row1]>>3;
+        }
+        else
+        {
+            RD2[0]=Num14B[shi1][row1];	  //时
+            RD2[1]=Num14B[shi1][row2] | Num14B[shi2][row1]>>3;
+        }
+        RD2[2]=Num14B[shi2][row1]<<5 | Num14B[shi2][row2]>>3;
+        RD2[3]=Num14B[fen1][row1]>>2;	   // 分
+        RD2[4]=Num14B[fen1][row1]<<6 | Num14B[fen1][row2]>>2 | Num14B[fen2][row1]>>5;
+        RD2[5]=Num14B[fen2][row1]<<3 | Num14B[fen2][row2]>>5;
+        RD2[6]=Num12[miao1][row-1]>>2;		   //秒
+        RD2[7]=Num12[miao2][row-1]>>1 | Num12[miao1][row-1]<<6;
+
+        if(GPS_POW)
+        {
+            RD2[2]|=maohao[0][row];
+            RD2[6]|=maohao[1][row];
+        }
+    }
+    if(PM)
+        RD2[0]|=Num12[15][row];
+}
+
+
+void Mode5_SJ_G()
+{
+    if(GPS_POW)
+    {
+        NOP;
+    }
+    else
+    {
+        GD2[2]|=maohao[2][row];
+        GD2[5]|=maohao[0][row];
+    }
+}
+
+
+void Mode5_SJ_R()
+{
+    uchar row1;
+
+    row1=row-1;		//	上1/2屏行扫描
+//	row2=row-8;		//	下1/2屏行扫描
+
+    if(row)
+    {
+        if(shi1==0) RD2[0]=0;
+        else
+            RD2[0]=Num14[shi1][row1];	  //时
+        RD2[1]=Num14[shi2][row1]>>2;
+        RD2[2]=Num14[shi2][row1]<<6;
+        RD2[3]=Num14[fen1][row1]>>2;	   // 分
+        RD2[4]=Num14[fen2][row1]>>4 | Num14[fen1][row1]<<6;
+        RD2[5]=Num14[fen2][row1]<<4 ;
+        RD2[6]=Num12[miao1][row1]>>1;		   //秒
+        RD2[7]=Num12[miao2][row1];
+
+        if(GPS_POW)
+        {
+            RD2[2]|=maohao[2][row];
+            RD2[5]|=maohao[0][row];
+        }
+    }
+
+    if(PM)
+        RD2[0]|=Num12[15][row];
+}
+
+
+void Mode6_SJ_G()
+{
+
+//秒点
+    if(SHAN)
+    {
+
+        if(GPS_POW)
+        {
+            NOP;
+        }
+        else
+        {
+            GD2[3]|=maohao[4][row];
+            GD2[4]|=maohao[3][row];
+        }
+
+    }
+    else
+        Delayus(30);
+
+}
+
+void Mode6_SJ_R()
+{
+    uchar  row3,row4;
+
+    if(row)
+    {
+        ////时间
+        row3=(row-1)*2;
+        row4=(row-1)*2+1;
+        if(shi1==0) 	 //
+            RD2[0]=RD2[1]=0;
+        else
+        {
+            RD2[0]=Num16B[shi1][row3];	  //时
+            RD2[1]=Num16B[shi1][row4];
+        }
+        RD2[2]=Num16B[shi2][row3]<<3 | Num16B[shi2][row4]>>5;
+        RD2[3]=Num16B[shi2][row4]<<3;	   // 分
+        RD2[4]=Num16B[fen1][row3]>>3;
+        RD2[5]=Num16B[fen1][row4]>>3| Num16B[fen1][row3]<<5;
+        RD2[6]=Num16B[fen2][row3];		   //秒
+        RD2[7]=Num16B[fen2][row4];
+        //秒点
+        if(SHAN)
+        {
+            if(GPS_POW)
+            {
+                RD2[3]|=maohao[4][row];
+                RD2[4]|=maohao[3][row];
+            }
+        }
+        else
+        {
+
+            if(GPS_POW)
+            {
+                NOP4;
+                NOP4;
+            }
+
+        }
+    }
+    if(PM)
+        RD2[0]|=Num12[15][row];
+}
+
+
+void Mode7_SJ_G()
+{
+
+//秒点
+    if(SHAN)
+    {
+
+        if(GPS_POW)
+        {
+            NOP;
+        }
+        else
+        {
+            GD2[3]|=maohao[4][row];
+            GD2[4]|=maohao[3][row];
+        }
+
+    }
+    else
+        Delayus(30);
+
+}
+
+void Mode7_SJ_R()
+{
+    uchar row3,row4;
+
+    if(row)
+    {
+        ////时间
+        row3=(row-1)*2;
+        row4=(row-1)*2+1;
+        if(shi1==0) 	 //
+            RD2[0]=RD2[1]=0;
+        else
+        {
+            RD2[0]=Num16[shi1][row3];	  //时
+            RD2[1]=Num16[shi1][row4];
+        }
+        RD2[2]=Num16[shi2][row3]<<3 | Num16[shi2][row4]>>5;
+        RD2[3]=Num16[shi2][row4]<<3;	   // 分
+        RD2[4]=Num16[fen1][row3]>>3;
+        RD2[5]=Num16[fen1][row4]>>3| Num16[fen1][row3]<<5;
+        RD2[6]=Num16[fen2][row3];		   //秒
+        RD2[7]=Num16[fen2][row4];
+        //秒点
+        if(SHAN)
+        {
+            if(GPS_POW)
+            {
+                RD2[3]|=maohao[4][row];
+                RD2[4]|=maohao[3][row];
+            }
+        }
+        else
+        {
+
+            if(GPS_POW)
+            {
+                NOP4;
+                NOP4;
+            }
+
+        }
+    }
+    if(PM)
+        RD2[0]|=Num12[15][row];
+}
+
+
+void Mode8_SJ_G()
+{
+    if(GPS_POW)
+    {
+        NOP;
+    }
+    else
+    {
+        GD1[2]|=maohao[0][row];
+        GD1[6]|=maohao[1][row];
+    }
+}
+
+void Mode8_SJ_R()
+{
+    uchar  row1,row2;
+//	shi1=shi2=0;
+
+    row1=(row)*2;		//	上1/2屏行扫描
+    row2=(row)*2+1;		//	下1/2屏行扫描
+
+    if(shi1==0)
+    {
+        RD1[0]=0;
+        RD1[1]=Num14B[shi2][row1]>>3;
+    }
+    else
+    {
+        RD1[0]=Num14B[shi1][row1];	  //时
+        RD1[1]=Num14B[shi1][row2] | Num14B[shi2][row1]>>3;
+    }
+    RD1[2]=Num14B[shi2][row1]<<5 | Num14B[shi2][row2]>>3;
+    RD1[3]=Num14B[fen1][row1]>>2;	   // 分
+    RD1[4]=Num14B[fen1][row1]<<6 | Num14B[fen1][row2]>>2 | Num14B[fen2][row1]>>5;
+    RD1[5]=Num14B[fen2][row1]<<3 | Num14B[fen2][row2]>>5;
+    RD1[6]=Num12[miao1][row-1]>>2;		   //秒
+    RD1[7]=Num12[miao2][row-1]>>1 | Num12[miao1][row-1]<<6;
+
+    if(GPS_POW)
+    {
+        RD1[2]|=maohao[0][row];
+        RD1[6]|=maohao[1][row];
+    }
+
+    if(PM)
+        RD1[0]|=Num12[15][row];
+}
+
+void Mode9_SJ_R()	   //细体时间 有秒
+{
+    if(!shi1) RD1[0]=0;
+    else
+        RD1[0]=Num14[shi1][row];	  //时
+    RD1[1]=Num14[shi2][row]>>2;
+    RD1[2]=Num14[shi2][row]<<6;
+    RD1[3]=Num14[fen1][row]>>2;	   // 分
+    RD1[4]=Num14[fen2][row]>>4 | Num14[fen1][row]<<6;
+    RD1[5]=Num14[fen2][row]<<4 ;
+    RD1[6]=Num12[miao1][row]>>1;		   //秒
+    RD1[7]=Num12[miao2][row]>>1;
+
+//	RD1[6]=Num12[z/100][row]>>1;		   //秒
+//	RD1[7]=Num12[z%100/10][row]>>1;
+    if(PM)
+        RD1[0]|=Num12[15][row];
+    if(GPS_POW)
+    {
+        RD1[2]|=maohao[2][row];
+        RD1[5]|=maohao[0][row];
+    }
+
+}
+
+
+void Mode9_SJ_G()
+{
+    if(GPS_POW)
+        NOP;
+    else
+    {
+        GD1[2]|=maohao[2][row];
+        GD1[5]|=maohao[0][row];
+    }
+}
+
+void Mode10_SJ_G()
+{
+
+//秒点
+    if(SHAN)
+    {
+
+        if(GPS_POW)
+        {
+            NOP;
+        }
+        else
+        {
+            GD1[3]|=maohao[4][row];
+            GD1[4]|=maohao[3][row];
+        }
+
+    }
+    else
+        Delayus(30);
+
+}
+
+void Mode10_SJ_R()
+{
+    uchar row3,row4;
+
+    ////时间
+    row3=row*2;
+    row4=row*2+1;
+    if(shi1==0) 	 //
+        RD1[0]=RD1[1]=0;
+    else
+    {
+        RD1[0]=Num16B[shi1][row3];	  //时
+        RD1[1]=Num16B[shi1][row4];
+    }
+    RD1[2]=Num16B[shi2][row3]<<3 | Num16B[shi2][row4]>>5;
+    RD1[3]=Num16B[shi2][row4]<<3;	   // 分
+    RD1[4]=Num16B[fen1][row3]>>3;
+    RD1[5]=Num16B[fen1][row4]>>3| Num16B[fen1][row3]<<5;
+    RD1[6]=Num16B[fen2][row3];		   //秒
+    RD1[7]=Num16B[fen2][row4];
+    //秒点
+    if(SHAN)
+    {
+        if(GPS_POW)
+        {
+            RD1[3]|=maohao[4][row];
+            RD1[4]|=maohao[3][row];
+        }
+    }
+    else
+    {
+
+        if(GPS_POW)
+        {
+            NOP4;
+            NOP4;
+        }
+
+    }
+
+    if(PM)
+        RD1[0]|=Num12[15][row];
+}
+
+void Mode11_SJ_G()
+{
+
+//秒点
+    if(SHAN)
+    {
+
+        if(GPS_POW)
+        {
+            NOP;
+        }
+        else
+        {
+            GD1[3]|=maohao[4][row];
+            GD1[4]|=maohao[3][row];
+        }
+
+    }
+    else
+        Delayus(30);
+
+}
+
+void Mode11_SJ_R()
+{
+    uchar row3,row4;
+
+    ////时间
+    row3=row*2;
+    row4=row*2+1;
+    if(shi1==0) 	 //
+        RD1[0]=RD1[1]=0;
+    else
+    {
+        RD1[0]=Num16[shi1][row3];	  //时
+        RD1[1]=Num16[shi1][row4];
+    }
+    RD1[2]=Num16[shi2][row3]<<3 | Num16[shi2][row4]>>5;
+    RD1[3]=Num16[shi2][row4]<<3;	   // 分
+    RD1[4]=Num16[fen1][row3]>>3;
+    RD1[5]=Num16[fen1][row4]>>3| Num16[fen1][row3]<<5;
+    RD1[6]=Num16[fen2][row3];		   //秒
+    RD1[7]=Num16[fen2][row4];
+    //秒点
+    if(SHAN)
+    {
+        if(GPS_POW)
+        {
+            RD1[3]|=maohao[4][row];
+            RD1[4]|=maohao[3][row];
+        }
+    }
+    else
+    {
+
+        if(GPS_POW)
+        {
+            NOP4;
+            NOP4;
+        }
+
+    }
+
+    if(PM)
+        RD1[0]|=Num12[15][row];
+}
+
+
+
+void Mode8_RQ_G()
+{
+    uchar row1=row*2;
+    uchar row2=row*2+1;
+    if(!yue1) GD1[0]=0;
+    else
+        GD2[0]=Num13[yue1][row];	 //月十位
+    GD2[1]=Num13[yue2][row];	 //月各位
+    GD2[2]=HZ[19][row1];	//汉字月
+    GD2[3]=HZ[19][row2] ;
+    GD2[4]=Num13[ri1][row];	 //日十位
+    GD2[5]=Num13[ri2][row];	 //日个位
+    GD2[6]=HZ[20][row1];	  //汉字日
+    GD2[7]=HZ[20][row2];
+}
+
+void Mode8_NL_G()		//农历显示
+{
+    uchar row1=row*2;
+    uchar row2=row*2+1;
+
+    GD2[0]=HZ[NL_yue][row1];   //月十位
+    GD2[1]=HZ[NL_yue][row2];
+    GD2[2]=HZ[14][row1];	//月
+    GD2[3]=HZ[14][row2];	//日个位
+    GD2[4]=NLday[r1][row1];
+    GD2[5]=NLday[r1][row2];	//日十位
+    GD2[6]=HZ[r2][row1];
+    GD2[7]=HZ[r2][row2];
+
+}
+
+
+void Mode8_XQ_G()
+{
+    uchar row1=row*2;
+    uchar row2=row*2+1;
+
+    GD2[0]=HZ[13][row1];
+    GD2[1]=HZ[13][row2];
+    GD2[2]=HZ[week][row1];
+    GD2[3]=HZ[week][row2];
+    GD2[4]=Num13[t1][row]>>5;
+    GD2[5]=Num13[t1][row]<<3 | Num13[t2][row]>>6;
+    GD2[6]=Num13[t2][row]<<2 ;
+    GD2[7]=Num12[10][row];
+}
+
+
+void Mode8_XQ_R()
+{
+
+    RD2[4]=Num13[t1][row]>>5;
+    RD2[5]=Num13[t1][row]<<3 | Num13[t2][row]>>6;
+    RD2[6]=Num13[t2][row]<<2 ;
+
+}
+
+
+void ModeSleep_R()
+{
+    if(PM)
+        RD1[1]|=Num12[15][row];
+    if(shi1)
+        RD1[2]=Num9[shi1][row];
+    RD1[3]=Num9[shi2][row];
+    if(SHAN)
+        RD1[4]=Num9[10][row];
+    RD1[5]=Num9[fen1][row];
+    RD1[6]=Num9[fen2][row];
+
+    RD2[3]=Num9[t1][row];
+    RD2[4]=Num9[t2][row];
+    RD2[5]=Num12[10][row]>>4;
+    RD2[6]=Num12[10][row]<<4;
+
+}
+
+void UartInit(void)		//9600bps@24.576MHz
+{
+    PCON &= 0x7F;		//波特率不倍速
+    SCON = 0x50;		//8位数据,可变波特率
+    AUXR |= 0x04;		//独立波特率发生器时钟为Fosc,即1T
+//	BRT = BRT_INT;		//设定独立波特率发生器重装值
+    AUXR |= 0x01;		//串口1选择独立波特率发生器为波特率发生器
+    AUXR |= 0x10;		//启动独立波特率发生器
+
+}
+
+
+void LoadData_G()
+{
+
+    switch (Set_S)
+    {
+    case 0:
+        if (POW_OK)
+        {
+            switch (XSMOD)
+            {
+            case 0:
+                Mode0123_RQ_G();
+                Mode0_SJ_G();
+                break;
+            case 1:
+                Mode0123_RQ_G();
+                Mode1_SJ_G();
+                break;
+            case 2:
+                Mode0123_RQ_G();
+                Mode2_SJ_G();
+                break;
+            case 3:
+                Mode0123_RQ_G();
+                Mode3_SJ_G();
+                break;
+            case 4:
+                Mode4567_RQ_G();
+                Mode4_SJ_G();
+                break;
+            case 5:
+                Mode4567_RQ_G();
+                Mode5_SJ_G();
+                break;
+            case 6:
+                Mode4567_RQ_G();
+                Mode6_SJ_G();
+                break;
+            case 7:
+                Mode4567_RQ_G();
+                Mode7_SJ_G();
+                break;
+            case 8:
+                Mode8_SJ_G();
+                if (miao2<3)
+                    Mode8_RQ_G();
+                else if (miao2<6)
+                    Mode8_NL_G();
+                else
+                    Mode8_XQ_G();
+                break;
+            case 9:
+                Mode9_SJ_G();
+                if (miao2<3)
+                    Mode8_RQ_G();
+                else if (miao2<6)
+                    Mode8_NL_G();
+                else
+                    Mode8_XQ_G();
+                break;
+            case 10:
+                Mode10_SJ_G();
+                if (miao2<3)
+                    Mode8_RQ_G();
+                else if (miao2<6)
+                    Mode8_NL_G();
+                else
+                    Mode8_XQ_G();
+                break;
+            case 11:
+                Mode11_SJ_G();
+                if (miao2<3)
+                    Mode8_RQ_G();
+                else if (miao2<6)
+                    Mode8_NL_G();
+                else
+                    Mode8_XQ_G();
+                break;
+            }
+        }
+        else
+            Delay(60);
+        break;
+    case 1:
+        SetNian_G();
+        break;
+    case 2:
+        SetYue_G();
+        break;
+    case 3:
+        SetRi_G();
+        break;
+    case 4:
+        SetShi_G();
+        break;
+    case 5:
+        SetFen_G();
+        break;
+    case 6:
+        SetMiao_G();
+        break;
+    case 7:
+        SetLiangdu_G();
+        break;;
+    case 8:
+        SetMinLiangdu_G();
+        break;
+    case 9:
+        SetLiangduG_G();
+        break;
+    case 10:
+        NTCbuchang_G();
+        break;
+    case 11:
+        Yaokong_G();
+        break;
+    case 12:
+    case 13:
+    case 14:
+    case 15:
+        Xuexi_G();
+        break;
+    }
+}
+
+
+void LoadData_R()
+{
+
+    switch (Set_S)
+    {
+    case 0:
+        if (POW_OK)
+        {
+            switch (XSMOD)
+            {
+            case 0:
+                Mode0123_RQ_R();
+                Mode0_SJ_R();
+                break;
+            case 1:
+                Mode0123_RQ_R();
+                Mode1_SJ_R();
+                break;
+            case 2:
+                Mode0123_RQ_R();
+                Mode2_SJ_R();
+                break;
+            case 3:
+                Mode0123_RQ_R();
+                Mode3_SJ_R();
+                break;
+            case 4:
+                Mode4567_RQ_R();
+                Mode4_SJ_R();
+                break;
+            case 5:
+                Mode4567_RQ_R();
+                Mode5_SJ_R();
+                break;
+            case 6:
+                Mode4567_RQ_R();
+                Mode6_SJ_R();
+                break;
+            case 7:
+                Mode4567_RQ_R();
+                Mode7_SJ_R();
+                break;
+            case 8:
+                Mode8_SJ_R();
+                if (miao2>5)
+                    Mode8_XQ_R();
+                break;
+            case 9:
+                Mode9_SJ_R();
+                if (miao2>5)
+                    Mode8_XQ_R();
+                break;
+            case 10:
+                Mode10_SJ_R();
+                if (miao2>5)
+                    Mode8_XQ_R();
+                break;
+            case 11:
+                Mode11_SJ_R();
+                if (miao2>5)
+                    Mode8_XQ_R();
+                break;
+
+            }
+        }
+        else
+            ModeSleep_R();
+        break;
+    case 1:
+        SetNian_R();
+        break;
+    case 2:
+        SetYue_R();
+        break;
+    case 3:
+        SetRi_R();
+        break;
+    case 4:
+        SetShi_R();
+        break;
+    case 5:
+        SetFen_R();
+        break;
+    case 6:
+        SetMiao_R();
+        break;
+    case 7:
+        SetLiangdu_R();
+        break;
+    case 8:
+        SetMinLiangdu_R();
+        break;
+    case 9:
+        SetLiangduG_R();
+        break;
+    case 10:
+        NTCbuchang_R();
+        break;
+    case 11:
+        Yaokong_R();
+        break;
+    case 12:
+    case 13:
+    case 14:
+    case 15:
+        Xuexi_R();
+        break;
+    }
+}
+
+void SendData_G()
+{
+    uchar i,j;
+    for(i=0; i<8; i++)					 //扫描1行
+    {
+#ifdef DATAHI
+        R1=0;
+        R2=0;
+        for(j=0; j<8; j++)			 //发送1个数据
+        {
+
+            GD1[i]<<=1;	//数据左移1
+            G1=CY;		//发送最高位，
+            GD2[i]<<=1;
+            G2=CY;		//由于数据是低电平有效，所以进行取反
+            CK=0;					//时钟下降
+            NOP4;
+            CK=1;	  //时钟上升
+        }
+#else
+        R1=1;
+        R2=1;
+        for(j=0; j<8; j++)
+        {
+            GD1[i]<<=1;	//数据左移1
+            G1=!CY;		//发送最高位，
+            GD2[i]<<=1;
+            G2=!CY;		//由于数据是低电平有效，所以进行取反
+            CK=0;		//时钟下降
+            NOP4;
+            CK=1;	//时钟上升
+        }
+#endif
+
+    }
+    //ABCD=row;			//行选
+    scan(row);
+    LS=0;
+    NOP4;
+    LS=1;				//锁存上升，显示输出
+    EN_ON();				//显示开
+    TH0=Light_G;
+    TL0=Light_L;
+    TR0=1;
+}
+
+
+void SendData_R()
+{
+    uchar i,j;
+
+    for(i=0; i<8; i++)					 //扫描1行
+    {
+#ifdef DATAHI
+        G1=0;
+        G2=0;
+        for(j=0; j<8; j++)			 //发送1个数据
+        {
+
+            RD1[i]<<=1;	//数据左移1
+            R1=CY;		//发送最高位，
+            RD2[i]<<=1;
+            R2=CY;		//由于数据是低电平有效，所以进行取反
+            CK=0;		//时钟下降
+            NOP4;
+            CK=1;	  //时钟上升
+        }
+#else
+        G1=1;
+        G2=1;
+        for(j=0; j<8; j++)
+        {
+            RD1[i]<<=1;	//数据左移1
+            R1=!CY;		//发送最高位，
+            RD2[i]<<=1;
+            R2=!CY;		//由于数据是低电平有效，所以进行取反
+            CK=0;		//时钟下降
+            NOP4;
+            CK=1;	//时钟上升
+        }
+#endif
+    }
+    //ABCD=row;			//行选
+    scan(row);
+    LS=0;
+    NOP4;
+    LS=1;				//锁存上升，显示输出
+    EN_ON();				//显示开
+//		Delay(80);
+    TH0=Light_R;
+    TL0=Light_L;
+    TR0=1;
+//		EN_OFF();			    //显示关
+//		Delay(1);
+}
+
+
+
+void Err3231()
+{
+
+    for(row=0; row<16; row++)
+    {
+        RD1[0]=ZMlogo[10][row];
+        RD1[1]=ZMlogo[2][row];
+        RD1[2]=Num12[3][row];
+        RD1[3]=Num12[2][row];
+        RD1[4]=Num12[3][row];
+        RD1[5]=Num12[1][row];
+//		RD1[6]=Num12[1][row];
+
+        RD2[0]=HZ[44][row*2];
+        RD2[1]=HZ[44][row*2+1];
+        RD2[2]=HZ[45][row*2];
+        RD2[3]=HZ[45][row*2+1];
+        RD2[4]=HZ[46][row*2];
+        RD2[5]=HZ[46][row*2+1];
+        RD2[6]=HZ[47][row*2];
+        RD2[7]=HZ[47][row*2+1];
+
+        SendData_G();
+        SendData_R();
+    }
+
+}
+
+void xianshi()
+{
+//	uchar i,j;
+
+    for(row=0; row<16; row++)			 //扫描16行
+    {
+        LoadData_G();
+        SendData_G();
+
+        LoadData_R();
+        SendData_R();
+    }
+}
+
+
+void TIM0() interrupt 1
+{
+//	z++;
+    EN_OFF();
+    TR0=0;
+    TL0=60;
+}
+
+void SetTime(uchar address, char min, char max)
+{
+    char item;
+
+    item=read_random(address);
+    item=item/16*10+item%16;
+    if (K_ADD)
+        item++;
+    else
+        item--;
+    if (item>max)
+        item=min;
+    if (item<min)
+        item=max;
+    ModifyTime(address,item/10*16+item%10);// 写入DS3231
+    GetAllTime();
+}
+
+
+void IR_ICON()
+{
+    if(IR_date[6])
+    {
+        if(Set_S<12)
+        {
+            if(IR_date[0]==IR_Key[0])
+            {
+                if(IR_date[6]==IR_Key[1])
+                {
+                    K_SET=1;
+                    IR_date[4]=0;
+                }
+                if(IR_date[6]==IR_Key[2])
+                {
+                    K_ADD=1;
+                    IR_date[4]=3;
+                }
+                if(IR_date[6]==IR_Key[3])
+                {
+                    K_DEC=1;
+                    IR_date[4]=3;
+                }
+                if(IR_date[6]==IR_Key[4])
+                {
+                    K_ESC=1;
+                    IR_date[4]=0;
+                }
+            }
+
+
+//			switch(IR_date[6])
+//			{
+//				case IR_Key[1]:	K_SET=1;  IR_date[4]=0;	break;
+//				case IR_Key[2]:	K_ADD=1;  IR_date[4]=3;	break;
+//				case IR_Key[3]:	K_DEC=1;  IR_date[4]=3;	break;
+//				case IR_Key[4]:	K_ESC=1;  IR_date[4]=0;	break;
+//
+//				default : break;
+//			}
+        }
+        else
+        {
+            if(!xuexi_OK)
+            {
+                switch(Set_S)
+                {
+                case 12:
+                    IR_Key[0]=IR_date[0];
+                    IR_Key[1]=IR_date[6];
+                    //	IR_date[4]=0;
+                    Write_EEP();
+                    xuexi_OK=1;
+                    break;
+                case 13:
+                    IR_Key[2]=IR_date[6];
+                    //	IR_date[4]=0;
+                    Write_EEP();
+                    xuexi_OK=1;
+                    break;
+                case 14:
+                    IR_Key[3]=IR_date[6];
+                    //	IR_date[4]=0;
+                    Write_EEP();
+                    xuexi_OK=1;
+                    break;
+                case 15:
+                    IR_Key[4]=IR_date[6];
+                    //	IR_date[4]=0;
+                    Write_EEP();
+                    xuexi_OK=1;
+                    break;
+
+                default:
+                    break;
+
+                }
+            }
+        }
+        IR_date[6]=0;
+    }
+}
+
+void KeyScan()	   //*按键扫描 */
+{
+    static bit KeySet_S,KeyAdd_S,KeyDec_S,KeyEsc_S;           //相应按键按下状态指示
+    static uint idata Keyout;
+
+    if(KeySet)
+        KeySet_S=1;  //
+    if(!KeySet&&KeySet_S)
+    {
+        xianshi();
+        if(!KeySet)
+        {
+            K_SET=1;
+            KeySet_S=0;
+            Keyout=0;
+        }
+    }
+
+    if(KeyAdd) 		   //+按键,
+        KeyAdd_S=1;
+    if(!KeyAdd&&KeyAdd_S)
+    {
+        xianshi();
+        if(!KeyAdd)
+        {
+            K_ADD=1;		 //加键按下后，+=1
+            KeyAdd_S=0;
+            Keyout=0;
+        }
+    }
+
+    if(KeyEsc) 		   //Esc按键,
+        KeyEsc_S=1;
+    if(!KeyEsc&&KeyEsc_S)
+    {
+        xianshi();
+        if(!KeyEsc)
+        {
+            K_ESC=1;		 //加键按下后，+=1
+            KeyEsc_S=0;
+            Keyout=0;
+        }
+    }
+
+    if(KeyDec)
+        KeyDec_S=1;  //-按键,
+    if(!KeyDec&&KeyDec_S)
+    {
+        xianshi();
+        if(!KeyDec)
+        {
+            K_DEC=1;		  //减键按下后，-键=1
+            KeyDec_S=0;
+            Keyout=0;
+
+        }
+    }
+
+    IR_ICON();
+
+    if(K_SET)
+    {
+        Set_S++;			//S键按下后，
+        if(Set_S>Set_Max)
+            Set_S=0;
+        K_SET=0;
+        xuexi_OK=0;
+    }
+
+    if(Set_S)
+    {
+        Keyout++;
+        if(Keyout>10000)  		//1分后退出调整状态
+            Keyout=0,Set_S=0;
+    }
+
+    if(K_ADD&&K_DEC)
+    {
+        NOP;
+    }
+    if(K_ADD | K_DEC)
+    {
+        switch(Set_S)
+        {
+        case 0:
+            if(K_ADD)
+            {
+                XSMOD++;
+                if(XSMOD>XSMOD_Max)
+                    XSMOD=0;
+                EEprom_WritePara(0x0000,XSMOD);	//显示模式写入EEROM的0x0000单元
+            }
+            else
+            {
+                Zhi_12=!Zhi_12;
+                EEprom_WritePara(0x0001,Zhi_12);//上下午标志写入EEROM 0x0001单元
+                GetAllTime();
+            }
+            break;
+        case 1:
+            SetTime(DS3231_YEAR, 15, 79);
+            break;	//年
+        case 2:
+            SetTime(DS3231_MONTH, 1, 12);
+            break;	//月
+        case 3:
+            SetTime(DS3231_DAY, 1, 31);
+            break;  	//日
+        case 4:
+            SetTime(DS3231_HOUR, 0, 23);
+            break;	//时
+        case 5:
+            SetTime(DS3231_MINUTE, 0, 59);
+            break;	//分
+        case 6:
+            SetTime(DS3231_SECOND, 0, 59);
+            break;	//秒
+        case 7:
+            if(K_ADD) Liangdu++;
+            else Liangdu--;
+            if(Liangdu>Liangdu_Max) Liangdu=0;
+            if(Liangdu<0) Liangdu=Liangdu_Max;
+            EEprom_WritePara(0x0002,Liangdu); //亮度写入 EEROM的0x02
+            break;
+        case 8:
+            if(K_ADD) Min_Liangdu++;
+            else Min_Liangdu--;
+            if(Min_Liangdu>Min_Liangdu_Max) Min_Liangdu=0;
+            if(Min_Liangdu<0) Min_Liangdu=Min_Liangdu_Max;
+            EEprom_WritePara(0x0003,Min_Liangdu); //最小亮度写入0x03
+            break;
+        case 9:
+            if(K_ADD) Liangdu_G++;
+            else Liangdu_G--;
+            if(Liangdu_G>Liangdu_G_Max) Liangdu_G=0;
+            if(Liangdu_G<0) Liangdu_G=Liangdu_G_Max;
+            EEprom_WritePara(0x0004,Liangdu_G); //绿补写入0x04
+            break;
+        case 10:
+            if(K_ADD) NTC_buchang++;
+            else NTC_buchang--;
+            if(NTC_buchang>19) NTC_buchang=19;
+            if(NTC_buchang<1) NTC_buchang=1;
+            EEprom_WritePara(0x0005,NTC_buchang); 	//NTC补偿写入0x05
+            break;
+        case 11:
+            IR_POW=!IR_POW;
+            EEprom_WritePara(0x0006,IR_POW); //	红外开关写入0x05
+
+        default :
+            break;
+        }
+        K_ADD=0;
+        K_DEC=0;
+    }
+    if(K_ESC)
+    {
+        Set_S=0;
+        K_ESC=0;
+    }
+
+}
+
+void main()
+{
+    uchar idata count;
+    uchar idata a,b;
+
+    P3M1=0x00;	   //以下为接LED点阵屏设为强推，适应有下拉或上拉电阻输入的屏,改引脚连接要先设引脚输出模式
+    P3M0=0xff;
+    P2M1=0x00;
+    P2M0=0x1f;
+
+
+    //P3M0=0x10;			  //0001 0000 P34推挽做红外接收电源
+    P1M1=0x18;			  //P13,P14高阻模式	,0001 1000
+    P1ASF=0x18;			  //P13,P14做ADC输入
+
+  EN_OFF();			    //显示关
+    ADC_CONTR=0x80;	//开启ADC电源
+    UartInit();			 //串口初始化
+    TMOD=0x11;			 //16bit
+    AUXR |= 0x80;		//	T0/ 1T
+    EA=1;
+    ES=1;
+    PS=1;
+    ET0=1;
+    EADC=1;	//开启ADC中断
+    IT1=1;	//int1下降沿触发
+    EX1=1;
+    ET1=1;
+    TR1=1;
+
+    if(DS18B20_TEST())
+    {
+        Delay(10);
+        if(DS18B20_TEST())
+            NTC=1;
+        else
+            NTC=0;
+    }
+    else
+        NTC=0;
+
+    ADCL=1;
+    ADC_CONTR=0xcb;		 //进行亮度AD转换
+    if(NTC)
+    {
+        while(ADCL);
+        ADCT=1;
+        ADC_CONTR=0xcc;		 //进行温度
+    }
+    else
+        Read18B20();
+    GPS_POW=0;
+    WDT_CONTR=0x34;		  //启动看门狗，16分频，约1s多
+    DS3231_Initial();		//根据DS3231状态是否进行初始化
+
+    ShowLogo();
+
+    ADCL=1;
+    ADC_CONTR=0xcb;		 //进行亮度AD转换
+    if(NTC)
+    {
+        while(ADCL);
+        ADCT=1;
+        ADC_CONTR=0xcc;		 //进行温度
+    }
+    else
+        Read18B20();
+    while(read_random(DS3231_A2D) !=1)   //如DS3231闹铃2的日期位标志不是原来的1,初始化。
+    {
+        Err3231();
+        WDT_CONTR=0x34;
+    }
+    POW_OK=1;
+    XSMOD=EEprom_ReadPara(0x0000);//从EEROM中读显示模式
+    Zhi_12=EEprom_ReadPara(0x0001);//读AM ，PM标志
+    Liangdu=EEprom_ReadPara(0x0002);//读亮度数据
+    Min_Liangdu=EEprom_ReadPara(0x0003);//读最低亮度数据
+    Liangdu_G=EEprom_ReadPara(0x0004);//读绿补数据
+    NTC_buchang=EEprom_ReadPara(0x0005);//读NTC温度补偿数据。
+    IR_POW=EEprom_ReadPara(0x0006);//读红外开关数据
+    if(XSMOD>XSMOD_Max)		XSMOD=0;
+
+    Read_EEP();			 //从单片机EEROM中读红外键位数据
+    GetAllTime();		//读取全部时间，并进行农历运算
+
+    while(1)
+    {
+        count++;
+        if(count>25)				//这个常数值根据晶振频率调整，使秒点闪1HZ
+        {
+            count=0;
+            a++;
+            ADCL=1;
+            ADC_CONTR=0xcb;			 //进行亮度AD转换
+            WDT_CONTR|=0x10;		   //喂狗
+            GetTime();				   //读取时间
+            if(a>1)
+            {
+                a=0;
+                b++;
+                SHAN2=!SHAN2;
+                SHAN=!SHAN;
+                if(b>1)
+                {
+                    b=0;
+//                   SHAN=!SHAN;
+                    if(NTC)
+                    {
+                        while(ADCL);
+                        ADCT=1;
+                        ADC_CONTR=0xcc;		 //进行温度
+                    }
+                    else
+                        Read18B20();
+                }
+            }
+        }
+
+//		 if(RX_over&&DW_OK)	   //接收完一帧数据并且收到定位成功信息后进行数据处理，定位后的时间肯定是准确的
+        if(RX_over && (RQ[4]>0x30 & RQ[4]<0x39) )	//如果信号较差能收到时间却没有定位可以用这句降低处理条件
+            GPSdata();
+
+//		 if(shi1==0&&shi2==1&&fen1==0&&fen2==0)	 //1点同步时间
+//		 {
+//		  	ES_ON;				//打开独立波特率发生器 ]
+//			GPS_POW=0;			//打开GPS电源
+//		 }
+
+        KeyScan();
+        xianshi();
+    }
+}
+
+
+void int1() interrupt 2 using 3
+{
+    static uchar a,b;
+    uchar temp;
+    EX1=0;
+    TR1=0;
+    temp=TH1;                         //将TH1数读入temp
+    TH1=0;
+    TL1=0;
+    TR1=1;                           //启动定时器0
+
+    switch (IR_date[4])
+    {
+    case 0: 		//开外部中断，允许新的遥控按键
+        IR_date[4]=1;
+        a=0,b=0;
+        break;
+
+    case 1:                          //启动码判定
+        if (temp<(0x64)||temp>(0x6f))     //如果周期小于6400h 12.8MS或大于6F00 14.2MS,错误退出
+            IR_date[4]=0xFF;
+        else
+            IR_date[4]=2;
+        break;
+
+
+    case 2:                        //0 1数字判定
+        if (temp<0x08||temp>0x14)     //如果周期小于800H 1.024MS或大于1400H 2.56MS,错误退出
+            IR_date[4]=0xFF;
+        else
+        {
+            IR_date[a]=IR_date[a]>>1;  //接收一位数据
+            if (temp>0x0E)            //如果时间长于1.792,则为1
+                IR_date[a]|=0x80;
+            else
+                IR_date[a]&=0x7F;
+            b++;
+            if (b>7)
+            {
+                a++;
+                b=0;    //一字节数据接收完毕判断
+            }
+            if (a>3)
+            {
+                if (IR_date[2]==~IR_date[3])  //判断按键码
+                {
+                    IR_date[6]=IR_date[2];
+                    IR_date[5]=1;
+                    IR_date[4]=0x03;
+                }
+                else
+                    IR_date[4]=0xFF;
+            }
+        }
+        break;
+
+    default:
+        if (IR_date[5])
+        {
+            IR_date[5]=0;        //连发次数清零
+            IR_date[4]=IR_date[4]+1;		//如果产生了时间中断，连发状态位加一
+        }
+        if (IR_date[4]>10)  //连发次数
+        {
+            IR_date[4]=3;
+            IR_date[6]=IR_date[2];
+        }
+        break;
+    }
+
+    if (IR_date[4]==0xFF)           //如果有错误，关闭定时0，
+    {
+        IR_date[4]=0;
+        IR_date[5]=0;
+        TR1=0;
+        TH1=0;
+        TL1=0;
+    }
+    EX1=1;                        //重开外中断允许
+}
+
+
+// 红外遥控超时处理
+
+void time1() interrupt 3
+{
+    TR1=1;
+    IR_date[5]=IR_date[5]+1;
+    if(IR_date[4]<3||IR_date[5]>2)  //如果不是连发而发生了中断或中断次数大于4次，判定为错误
+    {
+        IR_date[4]=0;
+        IR_date[5]=0;
+        TR1=0;
+        TH1=0;
+        TL1=0;
+    }
+}
+
+void ADC() interrupt 5	 using 2
+{
+//	uchar t;
+    uint ADC_temp;
+    static uchar m;
+    static uint TO;
+    static uint max,min;
+
+
+    ADC_CONTR&=0xEF;	  //清除ADC中断标志位
+
+    ADC_temp=ADC_RES<<2 | ADC_RESL	;
+
+    if(m==0)
+        min=max=ADC_temp;
+    if(ADC_temp>max)
+        max=ADC_temp;
+    if(ADC_temp<min)
+        min=ADC_temp;
+    TO+=ADC_temp;
+    m++;
+    if(m<10)
+        ADC_CONTR |= 0x08; 	  //启动下次AD转换
+    else
+    {
+        ADC_temp=(TO-min-max+4)>>3;	//去掉最大值最小值求平均值
+        TO=0;
+        m=0;
+
+        if(ADCL)
+        {
+            ADC_L=0xffff-(ADC_temp*Liangdu + Min_Liangdu*30);
+            Light_R=(ADC_L>>8);
+            Light_L=(ADC_L&0xff);
+            Li=255-Light_R;
+            Light_G=Light_R-Li*Liangdu_G/2 -Liangdu_G;
+            ADCL=0;
+        }
+
+        if(ADCT)	//温度
+        {
+            ADC_T=ADC_temp>>2;
+            ADC_T=ADC_T+NTC_buchang-10;
+            if(ADC_T>39 & ADC_T<190)
+            {
+//				t=temp[ADC_T-40];
+                t1=temp[ADC_T-40]/10;
+                t2=temp[ADC_T-40]%10;
+                if(t1==0)	 //首位0消隐
+                {
+                    if(XSMOD<8)
+                        t1=19;
+                    else
+                        t1=12;
+                }
+                if(ADC_T<60)  //低于0显示-
+                {
+                    if(XSMOD<8)
+                        t1=11;
+                    else
+                        t1=18;
+                }
+            }
+            else
+            {
+                if(XSMOD<8)
+                    t1=t2=18;
+                else
+                    t1=t2=11;
+            }
+            ADCT=0;
+        }
+    }
+}
+
+
+void Uart() interrupt 4 using 1
+{
+    uchar data Rx_temp ;
+    static uchar fg_count=0;	//数据间隔,计数
+    static uchar Rx_count=0;
+    static uchar n=0;		     //握手信号计数
+    static uchar da_count=0;	 //数据计数
+//	static bit RX_start;    //GPS数据接收开始标志位
+//	uchar idata GPRMC[6]={0x24,0x47,0x50,0x52,0x4D,0x43};    //GPS选择接收字符$GPRMC,
+
+    if(RI)
+    {
+        RI=0;
+        Rx_temp=SBUF;
+
+        /******* 监控握手信号进行软件复位自动下载 ******/
+        if(Rx_temp==0x7f)
+        {   //STC下载指令是0x7f
+            n++;
+            if(n>20)   		   //如果连续收到20次0x7f
+            {
+                IAP_CONTR=0x60;  //复位至ISP区
+                n=0;
+            }
+        }
+        else
+            n=0;
+
+        /********* GPS数据处理 **************/
+        if(Rx_count<6)
+        {
+            if(Rx_temp==GPRMC[Rx_count])    //比较开始$GPRMC字符，
+                Rx_count++;
+            else
+                Rx_count=0;
+        }
+        else  //找到GPRMC开始保存数据
+        {
+            if(Rx_temp==',')				//如果收到逗号，
+            {
+                fg_count++;					//计数增加
+                da_count=0;
+            }
+            else
+            {
+                if(fg_count==1)				//保存时间数据
+                {
+                    if(da_count<6)		   //只保存前6位时间数据
+                        SJ[da_count++]=Rx_temp;
+                }
+                else if(fg_count==2)			//保存定位信息
+                {
+                    if(Rx_temp=='A')	//如果收到A
+                        DW_OK=1;		//则定位成功
+                    else
+                        DW_OK=0;
+                }
+                else if(fg_count==9)				 //保存日期数据
+                    RQ[da_count++]=Rx_temp;
+                else if(fg_count>10)			 //接收完毕
+                {
+                    RX_over=1;
+//								RX_start=0;
+                    fg_count=0;
+                    da_count=0;
+                    Rx_count=0;
+                }
+            }
+        }
+    }
+
+}
